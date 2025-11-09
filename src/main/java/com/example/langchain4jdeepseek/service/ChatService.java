@@ -2,7 +2,7 @@ package com.example.langchain4jdeepseek.service;
 
 import com.example.langchain4jdeepseek.tools.CommandExecutionTool;
 import com.example.langchain4jdeepseek.tools.TavilySearchTool;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -16,12 +16,17 @@ import org.springframework.stereotype.Service;
 import java.util.Map;
 import java.util.List;
 
+// 定义Assistant接口，用于AiServices构建
+interface Assistant {
+    AiMessage chat(List<dev.langchain4j.data.message.ChatMessage> messages);
+}
+
 @Service
 public class ChatService {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatService.class);
 
-    private final ChatLanguageModel chatLanguageModel;
+    private final ChatModel chatLanguageModel;
     
     private final ChatMemory chatMemory;
     
@@ -35,7 +40,7 @@ public class ChatService {
     private String currentScenario = "default";
 
     @Autowired
-    public ChatService(ChatLanguageModel chatLanguageModel, 
+    public ChatService(ChatModel chatLanguageModel, 
                       CommandExecutionTool commandExecutionTool, 
                       TavilySearchTool tavilySearchTool,
                       SystemPromptManager systemPromptManager) {
@@ -80,13 +85,13 @@ public class ChatService {
             chatMemory.add(UserMessage.from(userMessage));
             
             // 创建带工具的AI服务
-            ChatLanguageModel chatWithTools = AiServices.builder(ChatLanguageModel.class)
-                    .chatLanguageModel(chatLanguageModel)
+            var assistant = AiServices.builder(Assistant.class)
+                    .chatModel(chatLanguageModel)
                     .tools(commandExecutionTool, tavilySearchTool)
                     .build();
             
             // 使用模型生成响应
-            AiMessage aiMessage = chatWithTools.generate(chatMemory.messages()).content();
+            AiMessage aiMessage = assistant.chat(chatMemory.messages());
             
             // 将AI消息添加到聊天历史中
             chatMemory.add(aiMessage);

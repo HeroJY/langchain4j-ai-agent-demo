@@ -4,6 +4,7 @@ import com.example.langchain4jdeepseek.config.TavilyConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.P;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
@@ -44,7 +45,7 @@ public class TavilySearchTool {
      * @return 格式化的搜索结果
      */
     @Tool("当需要查询最新信息时使用，例如查询当前天气、事件、新闻、股票价格等")
-    public String searchWeb(String query) {
+    public String searchWeb(@P("The search query") String query) {
         logger.info("正在搜索关键词: {}", query);
 
         // 检查配置是否正确加载

@@ -1,6 +1,7 @@
 package com.example.langchain4jdeepseek.tools;
 
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.P;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -84,7 +85,7 @@ public class CommandExecutionTool {
     }
 
     @Tool("Execute a shell command on the local system and return the output")
-    public String executeCommand(String command) {
+    public String executeCommand(@P("The command to execute") String command) {
         logger.info("Attempting to execute command: {}", command);
         
         // 首先检查命令是否在黑名单中

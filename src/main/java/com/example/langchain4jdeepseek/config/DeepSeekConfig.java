@@ -1,6 +1,6 @@
 package com.example.langchain4jdeepseek.config;
 
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -19,13 +19,15 @@ public class DeepSeekConfig {
     private String modelName;
 
     @Bean
-    public ChatLanguageModel deepSeekChatModel() {
+    public ChatModel deepSeekChatModel() {
         return OpenAiChatModel.builder()
                 .apiKey(apiKey)
                 .baseUrl(apiUrl)
                 .modelName(modelName)
                 .logRequests(true)
                 .logResponses(true)
+                .maxRetries(3)
+                .temperature(0.7)
                 .build();
     }
 }
