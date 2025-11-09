@@ -1,0 +1,131 @@
+# 命令执行工具黑名单配置
+# 以下命令被禁止执行，因为它们可能对系统造成安全风险
+
+# 系统破坏命令
+rm
+rmdir
+dd
+mkfs
+format
+fdisk
+shutdown
+reboot
+halt
+poweroff
+
+# 用户管理命令
+useradd
+userdel
+usermod
+passwd
+chpasswd
+su
+sudo
+
+# 系统配置命令
+chmod
+chown
+chgrp
+setfacl
+setcap
+
+# 网络相关危险命令
+iptables
+netfilter
+firewall-cmd
+ufw
+tcpdump
+wireshark
+nmap
+nc
+netcat
+
+# 包管理命令
+apt-get
+apt
+yum
+dnf
+pacman
+zypper
+portage
+brew
+pip
+npm
+yarn
+
+# 系统服务命令
+systemctl
+service
+chkconfig
+init
+upstart
+
+# 内核模块命令
+insmod
+rmmod
+modprobe
+lsmod
+
+# 设备文件命令
+mknod
+mount
+umount
+losetup
+swapon
+swapoff
+
+# 进程管理危险命令
+kill
+killall
+pkill
+skill
+
+# 其他危险命令
+crontab
+at
+batch
+nohup
+screen
+tmux
+passwd
+shadow
+/etc/passwd
+/etc/shadow
+/etc/sudoers
+
+# 特殊字符和命令组合
+&&
+||
+;
+|
+>
+>>
+<
+>&
+&>
+2>
+2>>
+2>&1
+
+# 编程语言解释器（可能用于执行任意代码）
+python
+python3
+perl
+ruby
+php
+node
+java
+javac
+gcc
+g++
+
+# 脚本执行
+sh
+bash
+zsh
+csh
+tcsh
+ksh
+fish
+powershell
+pwsh

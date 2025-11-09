@@ -1,0 +1,29 @@
+{
+  "properties": [
+    {
+      "name": "deepseek.api.key",
+      "type": "java.lang.String",
+      "description": "DeepSeek API密钥"
+    },
+    {
+      "name": "deepseek.api.url",
+      "type": "java.lang.String",
+      "description": "DeepSeek API基础URL"
+    },
+    {
+      "name": "deepseek.api.model.name",
+      "type": "java.lang.String",
+      "description": "DeepSeek聊天模型名称"
+    },
+    {
+      "name": "tavily.api.key",
+      "type": "java.lang.String",
+      "description": "Tavily搜索API密钥"
+    },
+    {
+      "name": "tavily.api.url",
+      "type": "java.lang.String",
+      "description": "Tavily搜索API基础URL"
+    }
+  ]
+}
