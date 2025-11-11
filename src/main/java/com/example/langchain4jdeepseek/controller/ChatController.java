@@ -128,9 +128,10 @@ public class ChatController {
                                 emitter.send(SseEmitter.event()
                                         .name("error")
                                         .data("Error: " + error.getMessage()));
-                                emitter.completeWithError(error);
                             } catch (IOException e) {
-                                emitter.completeWithError(e);
+                                // 忽略发送错误事件的异常，直接完成
+                            } finally {
+                                emitter.completeWithError(error);
                             }
                         }
                     });

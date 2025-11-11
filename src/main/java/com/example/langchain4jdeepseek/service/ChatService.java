@@ -210,11 +210,20 @@ public class ChatService {
         final String finalSystemPrompt = replaceVariables(systemPrompt);
         
         // 创建AI服务
-        Assistant assistant = AiServices.builder(Assistant.class)
-                .chatModel(chatModel)
-                .systemMessageProvider(ctx -> finalSystemPrompt)
-                .tools(tavilySearchTool, commandExecutionTool)
-                .build();
+        Assistant assistant;
+        // 根据场景决定是否使用工具
+        if (shouldUseToolsForScenario(scenario)) {
+            assistant = AiServices.builder(Assistant.class)
+                    .chatModel(chatModel)
+                    .systemMessageProvider(ctx -> finalSystemPrompt)
+                    .tools(tavilySearchTool, commandExecutionTool)
+                    .build();
+        } else {
+            assistant = AiServices.builder(Assistant.class)
+                    .chatModel(chatModel)
+                    .systemMessageProvider(ctx -> finalSystemPrompt)
+                    .build();
+        }
         
         // 处理用户消息
         UserMessage userMessage = UserMessage.from(message);
@@ -247,11 +256,22 @@ public class ChatService {
         final String finalSystemPrompt = replaceVariables(systemPrompt);
         
         // 创建AI服务
-        StreamingAssistant assistant = AiServices.builder(StreamingAssistant.class)
-                .streamingChatModel(streamingChatModel)
-                .systemMessageProvider(ctx -> finalSystemPrompt)
-                .tools(tavilySearchTool, commandExecutionTool)
-                .build();
+        StreamingAssistant assistant;
+        // 根据场景决定是否使用工具
+        if (shouldUseToolsForScenario(scenario)) {
+            logger.info("Creating streaming assistant for scenario: {} with tools", scenario);
+            assistant = AiServices.builder(StreamingAssistant.class)
+                    .streamingChatModel(streamingChatModel)
+                    .systemMessageProvider(ctx -> finalSystemPrompt)
+                    .tools(tavilySearchTool, commandExecutionTool)
+                    .build();
+        } else {
+            logger.info("Creating streaming assistant for scenario: {} without tools", scenario);
+            assistant = AiServices.builder(StreamingAssistant.class)
+                    .streamingChatModel(streamingChatModel)
+                    .systemMessageProvider(ctx -> finalSystemPrompt)
+                    .build();
+        }
         
         // 初始化会话内容
         streamingSessions.put(sessionId, new StringBuilder());
@@ -310,6 +330,20 @@ public class ChatService {
      */
     public String getCurrentScenario() {
         return currentScenario;
+    }
+    
+    /**
+     * 检查指定场景是否应该使用工具
+     * @param scenario 场景名称
+     * @return true表示应该使用工具，false表示不应该使用工具
+     */
+    private boolean shouldUseToolsForScenario(String scenario) {
+        // 翻译场景不需要使用工具，避免AI尝试搜索答案而不是翻译
+        if ("translator".equals(scenario)) {
+            return false;
+        }
+        // 默认情况下，其他场景都使用工具
+        return true;
     }
     
     /**

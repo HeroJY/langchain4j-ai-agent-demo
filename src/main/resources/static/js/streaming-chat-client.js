@@ -228,7 +228,25 @@ function integrateWithHtml() {
         try {
             await chatClient.sendMessage(message, {
                 onToken: (token) => {
-                    fullResponse += token;
+                    // 处理英文单词间的空格问题
+                    let tokenToAdd = token;
+                    
+                    // 如果当前响应不为空且当前token不以空格开头，且当前响应最后一个字符不是空格
+                    // 并且当前token是英文单词（包含字母），则在前面添加空格
+                    if (fullResponse.length > 0 && 
+                        !tokenToAdd.startsWith(' ') && 
+                        !fullResponse.endsWith(' ') &&
+                        !fullResponse.endsWith('\n') &&
+                        /^[a-zA-Z]/.test(tokenToAdd)) {
+                        
+                        // 检查当前响应最后一个字符是否是标点符号，如果是则添加空格
+                        const lastChar = fullResponse.slice(-1);
+                        if (/[a-zA-Z0-9,.!?;:]/.test(lastChar)) {
+                            tokenToAdd = ' ' + tokenToAdd;
+                        }
+                    }
+                    
+                    fullResponse += tokenToAdd;
                     aiMessageElement.textContent = fullResponse;
                 },
                 onComplete: () => {
