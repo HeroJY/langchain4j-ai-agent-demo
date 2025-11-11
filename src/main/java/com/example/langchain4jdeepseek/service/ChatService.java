@@ -2,276 +2,324 @@ package com.example.langchain4jdeepseek.service;
 
 import com.example.langchain4jdeepseek.tools.CommandExecutionTool;
 import com.example.langchain4jdeepseek.tools.TavilySearchTool;
-import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.chat.StreamingChatModel;
-import dev.langchain4j.model.output.Response;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.service.V;
-import dev.langchain4j.service.TokenStream;
-import dev.langchain4j.memory.ChatMemory;
-import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.StreamingChatLanguageModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.service.AiServices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
-import java.util.ArrayList;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StreamUtils;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import com.example.langchain4jdeepseek.service.StreamingResponseHandler;
-
-// 定义Assistant接口，用于AiServices构建
-interface Assistant {
-    AiMessage chat(List<dev.langchain4j.data.message.ChatMessage> messages);
-}
-
-// 定义流式Assistant接口
-    interface StreamingAssistant {
-        TokenStream chat(List<dev.langchain4j.data.message.ChatMessage> messages);
-    }
-
-
 
 @Service
 public class ChatService {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatService.class);
 
-    private final ChatModel chatLanguageModel;
-    
-    private final StreamingChatModel streamingChatModel;
-    
-    private final ChatMemory chatMemory;
-    
+    private final ChatLanguageModel chatModel;
+    private final StreamingChatLanguageModel streamingChatModel;
+    private final TavilySearchTool tavilySearchTool;
     private final CommandExecutionTool commandExecutionTool;
     
-    private final TavilySearchTool tavilySearchTool;
+    // 存储系统提示词的映射
+    private final Map<String, String> promptTemplates = new HashMap<>();
     
-    private final SystemPromptManager systemPromptManager;
+    // 存储动态变量的映射
+    private final Map<String, String> dynamicVariables = new HashMap<>();
+    
+    // 存储流式会话内容的映射
+    private final Map<String, StringBuilder> streamingSessions = new ConcurrentHashMap<>();
     
     // 当前使用的场景
     private String currentScenario = "default";
-    
-    // 存储流式响应会话
-    private final Map<String, StringBuilder> streamingSessions = new ConcurrentHashMap<>();
+
+    @Value("${system.prompt.file:classpath:system-prompts/default.prompt}")
+    private String defaultPromptFile;
 
     @Autowired
-    public ChatService(ChatModel chatLanguageModel, 
-                      StreamingChatModel streamingChatModel,
-                      CommandExecutionTool commandExecutionTool, 
-                      TavilySearchTool tavilySearchTool,
-                      SystemPromptManager systemPromptManager) {
-        this.chatLanguageModel = chatLanguageModel;
+    public ChatService(
+            ChatLanguageModel chatModel,
+            StreamingChatLanguageModel streamingChatModel,
+            TavilySearchTool tavilySearchTool,
+            CommandExecutionTool commandExecutionTool) {
+        this.chatModel = chatModel;
         this.streamingChatModel = streamingChatModel;
-        this.commandExecutionTool = commandExecutionTool;
         this.tavilySearchTool = tavilySearchTool;
-        this.systemPromptManager = systemPromptManager;
-        this.chatMemory = MessageWindowChatMemory.withMaxMessages(10);
+        this.commandExecutionTool = commandExecutionTool;
         
-        // 初始化时添加系统提示词
-        initializeSystemMessage();
+        // 初始化默认提示词
+        loadDefaultPrompt();
+        
+        // 初始化内置场景提示词
+        loadBuiltInScenarios();
+        
+        // 初始化默认动态变量
+        initializeDefaultVariables();
     }
     
     /**
-     * 初始化系统消息
+     * 加载默认系统提示词
      */
-    private void initializeSystemMessage() {
-        String systemPrompt = systemPromptManager.getSystemPrompt(currentScenario);
-        chatMemory.add(new SystemMessage(systemPrompt));
-    }
-
-    public String chat(String userMessage) {
-        return chatWithScenario(userMessage, null);
-    }
-    
-    /**
-     * 使用指定场景进行聊天
-     * @param userMessage 用户消息
-     * @param scenario 场景标识，如果为null则使用当前场景
-     * @return AI响应
-     */
-    public String chatWithScenario(String userMessage, String scenario) {
+    private void loadDefaultPrompt() {
         try {
-            logger.info("Received chat message: {} with scenario: {}", userMessage, scenario);
-            
-            // 如果指定了新场景，则更新系统提示词
-            if (scenario != null && !scenario.equals(currentScenario)) {
-                updateSystemPrompt(scenario);
+            Resource resource = new ClassPathResource("system-prompts/default.prompt");
+            String defaultPrompt = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
+            promptTemplates.put("default", defaultPrompt);
+            logger.info("Loaded default system prompt");
+        } catch (IOException e) {
+            logger.error("Failed to load default system prompt", e);
+            // 使用硬编码的默认提示词作为后备
+            promptTemplates.put("default", "你是一个专业的AI助手，请用简洁明了的语言回答问题。");
+        }
+    }
+    
+    /**
+     * 加载内置场景提示词
+     */
+    private void loadBuiltInScenarios() {
+        // 定义内置场景列表
+        String[] scenarios = {"code_reviewer", "customer_support", "technical_writer", "translator"};
+        
+        for (String scenario : scenarios) {
+            try {
+                Resource resource = new ClassPathResource("system-prompts/" + scenario + ".prompt");
+                String prompt = StreamUtils.copyToString(resource.getInputStream(), StandardCharsets.UTF_8);
+                promptTemplates.put(scenario, prompt);
+                logger.info("Loaded built-in scenario: {}", scenario);
+            } catch (IOException e) {
+                logger.warn("Failed to load built-in scenario: {}", scenario, e);
+                // 使用硬编码的提示词作为后备
+                loadFallbackScenario(scenario);
             }
-            
-            // 将用户消息添加到聊天历史中
-            chatMemory.add(UserMessage.from(userMessage));
-            
-            // 创建带工具的AI服务
-            var assistant = AiServices.builder(Assistant.class)
-                    .chatModel(chatLanguageModel)
-                    .tools(commandExecutionTool, tavilySearchTool)
-                    .build();
-            
-            // 使用模型生成响应
-            AiMessage aiMessage = assistant.chat(chatMemory.messages());
-            
-            // 将AI消息添加到聊天历史中
-            chatMemory.add(aiMessage);
-            
-            logger.info("Generated AI response: {}", aiMessage.text());
-            
-            return aiMessage.text();
+        }
+    }
+    
+    /**
+     * 加载后备场景提示词
+     */
+    private void loadFallbackScenario(String scenario) {
+        switch (scenario) {
+            case "code_reviewer":
+                promptTemplates.put(scenario, "你是一个专业的代码审查员，请对提供的代码进行详细的审查，包括代码质量、性能、安全性和最佳实践。");
+                break;
+            case "customer_support":
+                promptTemplates.put(scenario, "你是一个专业的客户支持代理，请耐心解答用户的问题，提供有用的解决方案，并保持友好和专业的态度。");
+                break;
+            case "technical_writer":
+                promptTemplates.put(scenario, "你是一个专业的技术文档编写员，请用清晰、准确的语言编写技术文档，确保内容易于理解且符合技术写作规范。");
+                break;
+            case "translator":
+                promptTemplates.put(scenario, "你是一个专业的翻译专家，请准确翻译文本内容，保持原文的含义和风格，并确保翻译结果符合目标语言的表达习惯。");
+                break;
+            default:
+                promptTemplates.put(scenario, "你是一个专业的AI助手，请用简洁明了的语言回答问题。");
+                break;
+        }
+    }
+    
+    /**
+     * 初始化默认动态变量
+     */
+    private void initializeDefaultVariables() {
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        
+        dynamicVariables.put("current_date", now.format(dateFormatter));
+        dynamicVariables.put("current_time", now.format(timeFormatter));
+        dynamicVariables.put("current_datetime", now.format(dateTimeFormatter));
+        
+        logger.info("Initialized default dynamic variables");
+    }
+    
+    /**
+     * 替换提示词中的变量
+     */
+    private String replaceVariables(String template) {
+        String result = template;
+        
+        // 替换动态变量
+        for (Map.Entry<String, String> entry : dynamicVariables.entrySet()) {
+            String placeholder = "${" + entry.getKey() + "}";
+            result = result.replace(placeholder, entry.getValue());
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 设置动态变量
+     */
+    public void setDynamicVariables(Map<String, String> variables) {
+        if (variables != null) {
+            dynamicVariables.putAll(variables);
+            logger.info("Updated dynamic variables: {}", variables.keySet());
+        }
+    }
+    
+    /**
+     * 获取当前系统提示词
+     */
+    public String getCurrentSystemPrompt() {
+        String template = promptTemplates.get(currentScenario);
+        if (template == null) {
+            template = promptTemplates.get("default");
+        }
+        return replaceVariables(template);
+    }
+    
+    /**
+     * 普通聊天方法
+     */
+    public String chat(String message) {
+        return chatWithScenario(message, "default");
+    }
+    
+    /**
+     * 带场景的聊天方法
+     */
+    public String chatWithScenario(String message, String scenario) {
+        // 设置当前场景
+        this.currentScenario = scenario;
+        
+        // 获取场景对应的系统提示词
+        String systemPrompt = promptTemplates.get(scenario);
+        if (systemPrompt == null) {
+            systemPrompt = promptTemplates.get("default");
+            logger.warn("Scenario '{}' not found, using default scenario", scenario);
+        }
+        
+        // 替换变量
+        systemPrompt = replaceVariables(systemPrompt);
+        
+        // 创建AI服务
+        Assistant assistant = AiServices.create(Assistant.class, chatModel)
+                .systemMessageProvider(ctx -> systemPrompt)
+                .tools(tavilySearchTool, commandExecutionTool)
+                .build();
+        
+        // 处理用户消息
+        UserMessage userMessage = UserMessage.from(message);
+        
+        try {
+            ChatResponse response = assistant.chat(userMessage);
+            logger.info("Chat response received for scenario: {}", scenario);
+            return response.aiMessage().text();
         } catch (Exception e) {
-            logger.error("Error occurred while generating response for message: {}", userMessage, e);
-            throw new RuntimeException("Failed to generate response: " + e.getMessage(), e);
+            logger.error("Error during chat with scenario: {}", scenario, e);
+            return "抱歉，处理您的请求时出现错误：" + e.getMessage();
         }
     }
     
     /**
      * 流式聊天方法
-     * @param userMessage 用户消息
-     * @param scenario 场景
-     * @param sessionId 会话ID
-     * @param responseHandler 响应处理器
      */
-    public void streamChat(String userMessage, String scenario, String sessionId, 
-                           StreamingResponseHandler<AiMessage> responseHandler) {
+    public void streamChat(String message, String scenario, String sessionId, StreamingResponseHandler<AiMessage> handler) {
+        // 设置当前场景
+        this.currentScenario = scenario;
+        
+        // 获取场景对应的系统提示词
+        String systemPrompt = promptTemplates.get(scenario);
+        if (systemPrompt == null) {
+            systemPrompt = promptTemplates.get("default");
+            logger.warn("Scenario '{}' not found, using default scenario", scenario);
+        }
+        
+        // 替换变量
+        systemPrompt = replaceVariables(systemPrompt);
+        
+        // 创建AI服务
+        StreamingAssistant assistant = AiServices.create(StreamingAssistant.class, streamingChatModel)
+                .systemMessageProvider(ctx -> systemPrompt)
+                .tools(tavilySearchTool, commandExecutionTool)
+                .build();
+        
+        // 初始化会话内容
+        streamingSessions.put(sessionId, new StringBuilder());
+        
+        // 处理用户消息
+        UserMessage userMessage = UserMessage.from(message);
+        
         try {
-            logger.info("Received streaming chat message: {} with scenario: {} and sessionId: {}", 
-                       userMessage, scenario, sessionId);
-            
-            // 初始化会话存储
-            streamingSessions.put(sessionId, new StringBuilder());
-            
-            // 如果指定了新场景，则更新系统提示词
-            if (scenario != null && !scenario.equals(currentScenario)) {
-                updateSystemPrompt(scenario);
-            }
-            
-            // 创建新的聊天内存用于流式处理
-            ChatMemory streamChatMemory = MessageWindowChatMemory.withMaxMessages(10);
-            // 复制当前聊天内存的内容
-            streamChatMemory.messages().addAll(chatMemory.messages());
-            
-            // 添加当前用户消息
-            streamChatMemory.add(UserMessage.from(userMessage));
-            
-            // 创建流式AI服务
-            var streamingAssistant = AiServices.builder(StreamingAssistant.class)
-                    .streamingChatModel(streamingChatModel)
-                    .tools(commandExecutionTool, tavilySearchTool)
-                    .build();
-            
-            // 使用TokenStream进行流式处理
-            TokenStream tokenStream = streamingAssistant.chat(streamChatMemory.messages());
-            
-            tokenStream.onPartialResponse(token -> {
-                // 将token添加到会话存储
-                streamingSessions.get(sessionId).append(token);
-                // 转发给原始响应处理器
-                responseHandler.onNext(token);
-            })
-            .onCompleteResponse(response -> {
-                // 将完整响应添加到原始聊天内存
-                chatMemory.add(UserMessage.from(userMessage));
-                chatMemory.add(response.aiMessage());
-                
-                // 清理会话存储
-                streamingSessions.remove(sessionId);
-                
-                logger.info("Completed streaming response for session: {}", sessionId);
-                responseHandler.onComplete(response);
-            })
-            .onError(error -> {
-                // 清理会话存储
-                streamingSessions.remove(sessionId);
-                
-                logger.error("Error in streaming response for session: {}", sessionId, error);
-                responseHandler.onError(error);
-            })
-            .start();
-            
+            assistant.chat(userMessage)
+                    .onNext(token -> {
+                        // 将token添加到会话内容
+                        streamingSessions.get(sessionId).append(token);
+                        // 发送token给处理器
+                        handler.onNext(token);
+                    })
+                    .onComplete(response -> {
+                        logger.info("Streaming chat completed for scenario: {}", scenario);
+                        handler.onComplete(response);
+                    })
+                    .onError(error -> {
+                        logger.error("Error during streaming chat with scenario: {}", scenario, error);
+                        handler.onError(error);
+                    })
+                    .start();
         } catch (Exception e) {
-            // 清理会话存储
-            streamingSessions.remove(sessionId);
-            
-            logger.error("Error occurred while setting up streaming response for message: {} and session: {}", 
-                        userMessage, sessionId, e);
-            responseHandler.onError(e);
+            logger.error("Error during streaming chat with scenario: {}", scenario, e);
+            handler.onError(e);
         }
     }
     
     /**
      * 获取流式会话的当前内容
-     * @param sessionId 会话ID
-     * @return 当前会话内容，如果会话不存在则返回null
      */
     public String getStreamingSessionContent(String sessionId) {
-        StringBuilder sessionContent = streamingSessions.get(sessionId);
-        return sessionContent != null ? sessionContent.toString() : null;
+        StringBuilder content = streamingSessions.get(sessionId);
+        return content != null ? content.toString() : null;
     }
     
     /**
-     * 更新系统提示词
-     * @param scenario 新的场景
+     * 添加提示词模板
      */
-    private void updateSystemPrompt(String scenario) {
-        // 移除旧的系统消息（如果存在）
-        chatMemory.messages().removeIf(message -> message instanceof SystemMessage);
-        
-        // 设置新场景
-        currentScenario = scenario;
-        
-        // 添加新的系统消息
-        String systemPrompt = systemPromptManager.getSystemPrompt(currentScenario);
-        chatMemory.add(new SystemMessage(systemPrompt));
-        
-        logger.info("Updated system prompt to scenario: {}", scenario);
+    public void addPromptTemplate(String scenario, String template) {
+        promptTemplates.put(scenario, template);
+        logger.info("Added new prompt template for scenario: {}", scenario);
     }
     
     /**
-     * 设置动态变量
-     * @param key 变量名
-     * @param value 变量值
+     * 获取可用场景列表
      */
-    public void setDynamicVariable(String key, String value) {
-        systemPromptManager.setDynamicVariable(key, value);
-        // 更新当前系统提示词以反映变量变化
-        updateSystemPrompt(currentScenario);
-    }
-    
-    /**
-     * 批量设置动态变量
-     * @param variables 变量映射
-     */
-    public void setDynamicVariables(Map<String, String> variables) {
-        systemPromptManager.setDynamicVariables(variables);
-        // 更新当前系统提示词以反映变量变化
-        updateSystemPrompt(currentScenario);
+    public List<String> getAvailableScenarios() {
+        return List.copyOf(promptTemplates.keySet());
     }
     
     /**
      * 获取当前场景
-     * @return 当前场景标识
      */
     public String getCurrentScenario() {
         return currentScenario;
     }
     
     /**
-     * 获取所有可用场景
-     * @return 场景列表
+     * 助手接口
      */
-    public List<String> getAvailableScenarios() {
-        return systemPromptManager.getAvailableScenarios();
+    interface Assistant {
+        ChatResponse chat(UserMessage message);
     }
     
     /**
-     * 添加新的提示词模板
-     * @param scenario 场景标识
-     * @param template 提示词模板
+     * 流式助手接口
      */
-    public void addPromptTemplate(String scenario, String template) {
-        systemPromptManager.addPromptTemplate(scenario, template);
+    interface StreamingAssistant {
+        dev.langchain4j.model.chat.ChatResponseStreamer chat(UserMessage message);
     }
 }
