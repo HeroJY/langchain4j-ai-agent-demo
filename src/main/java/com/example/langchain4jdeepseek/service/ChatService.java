@@ -4,10 +4,11 @@ import com.example.langchain4jdeepseek.tools.CommandExecutionTool;
 import com.example.langchain4jdeepseek.tools.TavilySearchTool;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.chat.StreamingChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.TokenStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,8 +32,8 @@ public class ChatService {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatService.class);
 
-    private final ChatLanguageModel chatModel;
-    private final StreamingChatLanguageModel streamingChatModel;
+    private final ChatModel chatModel;
+    private final StreamingChatModel streamingChatModel;
     private final TavilySearchTool tavilySearchTool;
     private final CommandExecutionTool commandExecutionTool;
     
@@ -53,8 +54,8 @@ public class ChatService {
 
     @Autowired
     public ChatService(
-            ChatLanguageModel chatModel,
-            StreamingChatLanguageModel streamingChatModel,
+            ChatModel chatModel,
+            StreamingChatModel streamingChatModel,
             TavilySearchTool tavilySearchTool,
             CommandExecutionTool commandExecutionTool) {
         this.chatModel = chatModel;
@@ -206,11 +207,12 @@ public class ChatService {
         }
         
         // 替换变量
-        systemPrompt = replaceVariables(systemPrompt);
+        final String finalSystemPrompt = replaceVariables(systemPrompt);
         
         // 创建AI服务
-        Assistant assistant = AiServices.create(Assistant.class, chatModel)
-                .systemMessageProvider(ctx -> systemPrompt)
+        Assistant assistant = AiServices.builder(Assistant.class)
+                .chatModel(chatModel)
+                .systemMessageProvider(ctx -> finalSystemPrompt)
                 .tools(tavilySearchTool, commandExecutionTool)
                 .build();
         
@@ -242,11 +244,12 @@ public class ChatService {
         }
         
         // 替换变量
-        systemPrompt = replaceVariables(systemPrompt);
+        final String finalSystemPrompt = replaceVariables(systemPrompt);
         
         // 创建AI服务
-        StreamingAssistant assistant = AiServices.create(StreamingAssistant.class, streamingChatModel)
-                .systemMessageProvider(ctx -> systemPrompt)
+        StreamingAssistant assistant = AiServices.builder(StreamingAssistant.class)
+                .streamingChatModel(streamingChatModel)
+                .systemMessageProvider(ctx -> finalSystemPrompt)
                 .tools(tavilySearchTool, commandExecutionTool)
                 .build();
         
@@ -258,13 +261,13 @@ public class ChatService {
         
         try {
             assistant.chat(userMessage)
-                    .onNext(token -> {
+                    .onPartialResponse(token -> {
                         // 将token添加到会话内容
                         streamingSessions.get(sessionId).append(token);
                         // 发送token给处理器
                         handler.onNext(token);
                     })
-                    .onComplete(response -> {
+                    .onCompleteResponse(response -> {
                         logger.info("Streaming chat completed for scenario: {}", scenario);
                         handler.onComplete(response);
                     })
@@ -320,6 +323,6 @@ public class ChatService {
      * 流式助手接口
      */
     interface StreamingAssistant {
-        dev.langchain4j.model.chat.ChatResponseStreamer chat(UserMessage message);
+        TokenStream chat(UserMessage message);
     }
 }
