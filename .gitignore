@@ -1,0 +1,53 @@
+# 忽略编译输出
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE
+.idea
+*.iws
+*.iml
+*.ipr
+.vscode/
+
+# 日志文件
+*.log
+app.log
+
+# 临时文件
+*.tmp
+*.temp
+
+# 操作系统生成的文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Chroma数据库文件
+chroma_db/
+
+# Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python虚拟环境
+venv/
+env/
+ENV/
+
+# Maven Wrapper
+.mvn/wrapper/maven-wrapper.properties
+
+# 本地API密钥配置文件
+src/main/resources/application-local.properties
+
+# 本地API测试文件
+test-tool-api.http
+# Chroma脚本目录（本地使用，不需要提交到版本控制）
+chroma_scripts/
