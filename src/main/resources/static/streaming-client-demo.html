@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流式聊天客户端示例</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .demo-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        
+        .demo-section h2 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        
+        .button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .button:hover {
+            background-color: #0069d9;
+        }
+        
+        .button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .output {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            min-height: 100px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        
+        .simple-chat {
+            display: flex;
+            flex-direction: column;
+            height: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        
+        .ai-message {
+            background-color: #e9ecef;
+            color: #333;
+            align-self: flex-start;
+        }
+        
+        .chat-input {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+        }
+        
+        .chat-input input {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>流式聊天客户端示例</h1>
+        
+        <div class="demo-section">
+            <h2>基本示例</h2>
+            <p>点击下面的按钮发送一个简单的消息，并在输出区域查看流式响应。</p>
+            <button id="basicExampleBtn" class="button">运行基本示例</button>
+            <div id="basicOutput" class="output"></div>
+        </div>
+        
+        <div class="demo-section">
+            <h2>场景示例</h2>
+            <p>获取可用场景列表，然后使用第一个场景发送消息。</p>
+            <button id="scenarioExampleBtn" class="button">运行场景示例</button>
+            <div id="scenarioOutput" class="output"></div>
+        </div>
+        
+        <div class="demo-section">
+            <h2>简单聊天界面</h2>
+            <p>一个简单的聊天界面，可以输入消息并查看流式响应。</p>
+            <div class="simple-chat">
+                <div id="chatMessages" class="chat-messages">
+                    <div class="message ai-message">您好！我是AI助手，有什么可以帮助您的吗？</div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chatInput" placeholder="输入您的消息..." />
+                    <button id="chatSendBtn" class="button">发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/streaming-chat-client.js"></script>
+    <script>
+        // 创建聊天客户端实例
+        const chatClient = new StreamingChatClient();
+        
+        // 获取DOM元素
+        const basicExampleBtn = document.getElementById('basicExampleBtn');
+        const basicOutput = document.getElementById('basicOutput');
+        const scenarioExampleBtn = document.getElementById('scenarioExampleBtn');
+        const scenarioOutput = document.getElementById('scenarioOutput');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const chatSendBtn = document.getElementById('chatSendBtn');
+        
+        // 基本示例
+        basicExampleBtn.addEventListener('click', async () => {
+            basicExampleBtn.disabled = true;
+            basicOutput.textContent = '发送消息: 你好，请介绍一下你自己\n\n响应: ';
+            
+            try {
+                await chatClient.sendMessage('你好，请介绍一下你自己', {
+                    onToken: (token) => {
+                        basicOutput.textContent += token;
+                    },
+                    onComplete: () => {
+                        basicOutput.textContent += '\n\n完成!';
+                        basicExampleBtn.disabled = false;
+                    },
+                    onError: (error) => {
+                        basicOutput.textContent += `\n\n错误: ${error}`;
+                        basicExampleBtn.disabled = false;
+                    }
+                });
+            } catch (error) {
+                basicOutput.textContent += `\n\n错误: ${error.message}`;
+                basicExampleBtn.disabled = false;
+            }
+        });
+        
+        // 场景示例
+        scenarioExampleBtn.addEventListener('click', async () => {
+            scenarioExampleBtn.disabled = true;
+            scenarioOutput.textContent = '获取可用场景...\n';
+            
+            try {
+                // 获取可用场景
+                const scenarios = await chatClient.getScenarios();
+                scenarioOutput.textContent += `可用场景: ${scenarios.join(', ')}\n\n`;
+                
+                if (scenarios.length > 0) {
+                    const scenario = scenarios[0];
+                    scenarioOutput.textContent += `使用场景: ${scenario}\n\n`;
+                    scenarioOutput.textContent += `发送消息: 请帮我完成一个任务\n\n响应: `;
+                    
+                    await chatClient.sendMessage('请帮我完成一个任务', {
+                        scenario: scenario,
+                        onToken: (token) => {
+                            scenarioOutput.textContent += token;
+                        },
+                        onComplete: () => {
+                            scenarioOutput.textContent += '\n\n完成!';
+                            
+                            if (chatClient.currentSessionId) {
+                                scenarioOutput.textContent += `\n\n获取会话内容 (ID: ${chatClient.currentSessionId})...\n`;
+                                chatClient.getSessionContent(chatClient.currentSessionId)
+                                    .then(content => {
+                                        scenarioOutput.textContent += JSON.stringify(content, null, 2);
+                                        scenarioExampleBtn.disabled = false;
+                                    })
+                                    .catch(error => {
+                                        scenarioOutput.textContent += `\n错误: ${error.message}`;
+                                        scenarioExampleBtn.disabled = false;
+                                    });
+                            } else {
+                                scenarioExampleBtn.disabled = false;
+                            }
+                        },
+                        onError: (error) => {
+                            scenarioOutput.textContent += `\n\n错误: ${error}`;
+                            scenarioExampleBtn.disabled = false;
+                        }
+                    });
+                } else {
+                    scenarioOutput.textContent += '没有可用的场景';
+                    scenarioExampleBtn.disabled = false;
+                }
+            } catch (error) {
+                scenarioOutput.textContent += `\n错误: ${error.message}`;
+                scenarioExampleBtn.disabled = false;
+            }
+        });
+        
+        // 简单聊天界面
+        function addMessage(text, sender) {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${sender}-message`;
+            messageElement.textContent = text;
+            
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            return messageElement;
+        }
+        
+        async function sendChatMessage() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+            
+            // 清空输入框并禁用发送按钮
+            chatInput.value = '';
+            chatSendBtn.disabled = true;
+            
+            // 添加用户消息
+            addMessage(message, 'user');
+            
+            // 创建AI消息元素
+            let aiMessageElement = addMessage('', 'ai');
+            let fullResponse = '';
+            
+            try {
+                await chatClient.sendMessage(message, {
+                    onToken: (token) => {
+                        fullResponse += token;
+                        aiMessageElement.textContent = fullResponse;
+                    },
+                    onComplete: () => {
+                        chatSendBtn.disabled = false;
+                    },
+                    onError: (error) => {
+                        aiMessageElement.textContent += `\n\n错误: ${error}`;
+                        chatSendBtn.disabled = false;
+                    }
+                });
+            } catch (error) {
+                aiMessageElement.textContent = `错误: ${error.message}`;
+                chatSendBtn.disabled = false;
+            }
+        }
+        
+        // 添加事件监听器
+        chatSendBtn.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+    </script>
+</body>
+</html>

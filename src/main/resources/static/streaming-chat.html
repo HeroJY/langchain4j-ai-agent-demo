@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流式聊天示例</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 500px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        
+        .ai-message {
+            background-color: #e9ecef;
+            color: #333;
+            align-self: flex-start;
+        }
+        
+        .input-container {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #ddd;
+            background-color: white;
+        }
+        
+        #messageInput {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            padding: 10px 15px;
+            font-size: 16px;
+            outline: none;
+        }
+        
+        #sendButton {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 10px 20px;
+            margin-left: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        
+        #sendButton:hover {
+            background-color: #0069d9;
+        }
+        
+        #sendButton:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .typing-indicator {
+            display: none;
+            padding: 10px 15px;
+            background-color: #e9ecef;
+            border-radius: 18px;
+            max-width: 80%;
+            margin-bottom: 15px;
+        }
+        
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #6c757d;
+            margin-right: 5px;
+            animation: typing 1.4s infinite;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+            }
+            30% {
+                transform: translateY(-10px);
+            }
+        }
+        
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .scenario-select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .status {
+            font-size: 14px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>流式聊天示例</h1>
+        
+        <div class="chat-container">
+            <div class="messages" id="messages">
+                <div class="message ai-message">
+                    您好！我是AI助手，有什么可以帮助您的吗？
+                </div>
+            </div>
+            
+            <div class="typing-indicator" id="typingIndicator">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            
+            <div class="input-container">
+                <input type="text" id="messageInput" placeholder="输入您的消息..." />
+                <button id="sendButton">发送</button>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div>
+                <label for="scenarioSelect">场景选择:</label>
+                <select id="scenarioSelect" class="scenario-select">
+                    <option value="">默认</option>
+                </select>
+            </div>
+            <div class="status" id="status">就绪</div>
+        </div>
+    </div>
+
+    <script>
+        // 获取DOM元素
+        const messagesContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const scenarioSelect = document.getElementById('scenarioSelect');
+        const statusElement = document.getElementById('status');
+        
+        // 当前AI消息元素
+        let currentAiMessage = null;
+        let currentSessionId = null;
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadScenarios();
+            
+            // 添加事件监听器
+            sendButton.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
+        
+        // 加载可用场景
+        async function loadScenarios() {
+            try {
+                const response = await fetch('/api/chat/scenarios');
+                const scenarios = await response.json();
+                
+                // 清空现有选项（保留默认选项）
+                while (scenarioSelect.children.length > 1) {
+                    scenarioSelect.removeChild(scenarioSelect.lastChild);
+                }
+                
+                // 添加新选项
+                scenarios.forEach(scenario => {
+                    const option = document.createElement('option');
+                    option.value = scenario;
+                    option.textContent = scenario;
+                    scenarioSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('加载场景失败:', error);
+            }
+        }
+        
+        // 发送消息
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // 清空输入框并禁用发送按钮
+            messageInput.value = '';
+            sendButton.disabled = true;
+            statusElement.textContent = '发送中...';
+            
+            // 添加用户消息到聊天界面
+            addMessage(message, 'user');
+            
+            // 显示打字指示器
+            typingIndicator.style.display = 'block';
+            
+            try {
+                // 准备请求数据
+                const requestData = {
+                    message: message
+                };
+                
+                // 如果选择了场景，添加到请求中
+                const selectedScenario = scenarioSelect.value;
+                if (selectedScenario) {
+                    requestData.scenario = selectedScenario;
+                }
+                
+                const response = await fetch('/api/chat/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream',
+                        'Cache-Control': 'no-cache'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                // 创建AI消息元素
+                currentAiMessage = addMessage('', 'ai');
+                let buffer = '';
+                
+                // 处理流式响应
+                let currentEventType = null;
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) {
+                        break;
+                    }
+                    
+                    // 解码数据并处理
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // 保留不完整的行
+                    
+                    for (const line of lines) {
+                        if (line.trim() === '') continue;
+                        
+                        // 处理SSE格式的数据
+                        if (line.startsWith('event:')) {
+                            currentEventType = line.substring(6).trim();
+                            continue; // 事件类型行，继续处理下一行
+                        }
+                        
+                        if (line.startsWith('data:')) {
+                            const data = line.substring(5).trim();
+                            
+                            // 根据当前事件类型处理数据
+                            if (currentEventType === 'session-id') {
+                                handleSseEvent('session-id', data);
+                            } else if (currentEventType === 'token') {
+                                handleSseEvent('token', data);
+                            } else if (currentEventType === 'complete') {
+                                handleSseEvent('complete', data);
+                            } else if (currentEventType === 'error') {
+                                handleSseEvent('error', data);
+                            } else {
+                                // 默认作为token处理
+                                handleSseEvent('token', data);
+                            }
+                        }
+                    }
+                }
+                
+                statusElement.textContent = '就绪';
+            } catch (error) {
+                console.error('发送消息失败:', error);
+                statusElement.textContent = '错误: ' + error.message;
+                
+                // 如果有正在创建的AI消息，添加错误信息
+                if (currentAiMessage) {
+                    currentAiMessage.textContent += '\n\n错误: 无法获取响应';
+                }
+            } finally {
+                // 隐藏打字指示器并启用发送按钮
+                typingIndicator.style.display = 'none';
+                sendButton.disabled = false;
+                currentAiMessage = null;
+                currentSessionId = null;
+            }
+        }
+        
+        // 处理SSE事件
+        function handleSseEvent(eventType, data) {
+            switch (eventType) {
+                case 'session-id':
+                    console.log('Session ID:', data);
+                    break;
+                case 'token':
+                    if (currentAiMessage) {
+                        currentAiMessage.textContent += data;
+                        scrollToBottom();
+                    }
+                    break;
+                case 'complete':
+                    if (currentAiMessage) {
+                        currentAiMessage.classList.add('complete');
+                    }
+                    currentAiMessage = null;
+                    break;
+                case 'error':
+                    if (currentAiMessage) {
+                        currentAiMessage.textContent = '错误: ' + data;
+                        currentAiMessage.classList.add('error');
+                    }
+                    currentAiMessage = null;
+                    break;
+            }
+        }
+        
+        // 添加消息到聊天界面
+        function addMessage(text, sender) {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${sender}-message`;
+            messageElement.textContent = text;
+            
+            messagesContainer.appendChild(messageElement);
+            
+            // 滚动到底部
+            scrollToBottom();
+            
+            return messageElement;
+        }
+        
+        // 滚动到底部
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    </script>
+</body>
+</html>

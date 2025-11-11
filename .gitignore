@@ -49,6 +49,5 @@ src/main/resources/application-local.properties
 
 # 本地API测试文件
 test-tool-api.http
-
 # Chroma脚本目录（本地使用，不需要提交到版本控制）
 chroma_scripts/
